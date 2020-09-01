@@ -88,11 +88,12 @@ housing.plot(kind="scatter", x="longitude", y="latitude", alpha=0.4,
 plt.legend()
 save_fig("housing_prices_scatterplot")
 
+housing = strat_train_set.drop("median_house_value", axis=1) # drop labels for training set
+housing_labels = strat_train_set["median_house_value"].copy()
 
 # column index
 rooms_ix, bedrooms_ix, population_ix, households_ix = 3, 4, 5, 6
 
-## cust transformer
 class CombinedAttributesAdder(BaseEstimator, TransformerMixin):
     def __init__(self, add_bedrooms_per_room = True): # no *args or **kargs
         self.add_bedrooms_per_room = add_bedrooms_per_room
@@ -110,6 +111,14 @@ class CombinedAttributesAdder(BaseEstimator, TransformerMixin):
 
 attr_adder = CombinedAttributesAdder(add_bedrooms_per_room=False)
 housing_extra_attribs = attr_adder.transform(housing.values)
+
+housing_extra_attribs = pd.DataFrame(
+    housing_extra_attribs,
+    columns=list(housing.columns)+["rooms_per_household", "population_per_household"],
+    index=housing.index)
+
+print (housing_extra_attribs.head())
+
 
 # seperate text attr and numb atr
 housing_num = housing.select_dtypes(include=[np.number])
@@ -132,9 +141,10 @@ full_pipeline = ColumnTransformer([
         ("cat", OneHotEncoder(), cat_attribs),
     ])
 
-housing_prepared = full_pipeline.fit_transform(housing)
+print(housing.columns)
 
-housing_labels = strat_train_set["median_house_value"].copy()
+
+housing_prepared = full_pipeline.fit_transform(housing)
 
 
 param_distribs = {
@@ -144,7 +154,7 @@ param_distribs = {
 
 forest_reg = RandomForestRegressor(random_state=42)
 rnd_search = RandomizedSearchCV(forest_reg, param_distributions=param_distribs,
-                                n_iter=10, cv=5, scoring='neg_mean_squared_error', random_state=42)
+                                n_iter=100, cv=5, scoring='neg_mean_squared_error', random_state=42)
 rnd_search.fit(housing_prepared, housing_labels)
 
 cvres = rnd_search.cv_results_
@@ -154,7 +164,7 @@ for mean_score, params in zip(cvres["mean_test_score"], cvres["params"]):
 feature_importances = rnd_search.best_estimator_.feature_importances_
 print(feature_importances)
 
-extra_attribs = ["rooms_per_hhold", "pop_per_hhold", "bedrooms_per_room"]
+extra_attribs = ["rooms_per_household", "population_per_household", "bedrooms_per_room"]
 
 cat_encoder = full_pipeline.named_transformers_["cat"]
 cat_one_hot_attribs = list(cat_encoder.categories_[0])
@@ -174,3 +184,5 @@ final_predictions = final_model.predict(X_test_prepared)
 
 final_mse = mean_squared_error(y_test, final_predictions)
 final_rmse = np.sqrt(final_mse)
+
+print (final_rmse)
